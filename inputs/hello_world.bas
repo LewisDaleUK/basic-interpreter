@@ -1,1 +1,1 @@
-10 PRINT "Hello, world."
+10 PRINT "Hello, \"world\"."

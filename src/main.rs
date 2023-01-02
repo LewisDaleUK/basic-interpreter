@@ -8,7 +8,7 @@ fn main() {
     let (_, (_, command)) = basic::parse_line(lines).unwrap();
     match command {
         basic::Command::Print(input) => {
-            println!("{}", input);
+            println!("{}", input.replace("\\", ""));
         }
         _ => {
             panic!("Command not recognised");

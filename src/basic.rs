@@ -1,6 +1,6 @@
 use nom::{
-    bytes::complete::{tag, take_until},
-    character::complete::u32 as ccu32,
+    bytes::complete::{tag, take_until, escaped},
+    character::{complete::{u32 as ccu32, one_of}, streaming::none_of},
     combinator::map,
     sequence::{delimited, terminated, tuple},
     IResult,
@@ -15,14 +15,19 @@ pub enum Command<'a> {
 }
 
 fn read_string(i: &str) -> IResult<&str, &str> {
-    take_until("\"")(i)
+    // take_until("\"")(i)
+	delimited(
+		tag("\""),
+		escaped(none_of("\\\""), '\\', one_of("\"\\")),
+		tag("\"")
+	)(i)
 }
 
 fn parse_command(i: &str) -> IResult<&str, Command> {
     let (i, (command, _)) = tuple((take_until(" "), tag(" ")))(i)?;
 
     let (i, cmd) = match command {
-        "PRINT" => map(delimited(tag("\""), read_string, tag("\"")), Command::Print)(i)?,
+        "PRINT" => map(read_string, Command::Print)(i)?,
         _ => (i, Command::None),
     };
 
@@ -45,4 +50,20 @@ mod tests {
         let (_, result) = super::parse_line(input).unwrap();
         assert_eq!(expected, result);
     }
+
+	#[test]
+	fn it_reads_a_string() {
+		let input = r#""Hello, \"World\"""#;
+		let (_, output) = super::read_string(input).unwrap();
+		assert_eq!(r#"Hello, \"World\""#, output);
+	}
+
+	#[test]
+	fn it_parses_a_print_command_with_escaped_quotes() {
+		let input = r#"10 PRINT "Hello, \"world\"""#;
+        let expected = (10, super::Command::Print(r#"Hello, \"world\""#));
+
+        let (_, result) = super::parse_line(input).unwrap();
+        assert_eq!(expected, result);
+	}
 }
