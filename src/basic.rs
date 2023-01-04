@@ -96,6 +96,13 @@ impl Program {
     }
 }
 
+impl From<&str> for Program {
+    fn from(value: &str) -> Self {
+        let (_, program) = read_program(value).unwrap();
+        program
+    }
+}
+
 impl Iterator for Program {
     type Item = Node;
 

@@ -4,6 +4,6 @@ mod basic;
 
 fn main() {
     let file = fs::read_to_string("./inputs/simple_program.bas").unwrap();
-    let (_, mut program) = basic::read_program(&file).unwrap();
+    let mut program = basic::Program::from(file.as_str());
     program.execute();
 }
