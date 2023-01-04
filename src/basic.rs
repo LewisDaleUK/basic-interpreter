@@ -1,13 +1,10 @@
 use nom::{
     branch::alt,
-    bytes::complete::{escaped_transform, tag, take_until},
-    character::{
-        complete::{u32 as ccu32, u64 as ccu64},
-        streaming::none_of,
-    },
+    bytes::complete::{escaped_transform, tag},
+    character::{complete::u64 as ccu64, streaming::none_of},
     combinator::{map, value},
-    multi::{many0, separated_list0},
-    sequence::{delimited, terminated, tuple},
+    multi::separated_list0,
+    sequence::{delimited, terminated},
     IResult,
 };
 
@@ -70,7 +67,7 @@ impl Program {
         }
     }
 
-    pub fn to_line(&mut self, line: usize) {
+    pub fn jump_to_line(&mut self, line: usize) {
         if let Some(node) = self.nodes.find_line(line) {
             self.current = node;
         } else {
@@ -82,15 +79,12 @@ impl Program {
         let mut iter = self.clone();
 
         while let Some(node) = iter.next() {
-            match node {
-                Node::Link { item, next } => {
-                    match item.1 {
-                        Command::Print(line) => println!("{}", line),
-                        Command::GoTo(line) => iter.to_line(line),
-                        _ => panic!("Unrecognised command")
-                    }
-                },
-                _ => ()
+            if let Node::Link { item, next: _ } = node {
+                match item.1 {
+                    Command::Print(line) => println!("{}", line),
+                    Command::GoTo(line) => iter.jump_to_line(line),
+                    _ => panic!("Unrecognised command"),
+                }
             };
         }
     }
