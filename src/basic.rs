@@ -1,10 +1,10 @@
 use nom::{
     branch::alt,
-    bytes::complete::{escaped_transform, tag},
-    character::{complete::u64 as ccu64, streaming::none_of},
-    combinator::{map, value},
+    bytes::complete::{escaped_transform, tag, take_until},
+    character::{complete::{u64 as ccu64, anychar}, streaming::none_of, complete::char as ccchar, complete::{i64 as cci64, alphanumeric1, digit1, alpha1}},
+    combinator::{map, value, not, verify},
     multi::separated_list0,
-    sequence::{delimited, terminated},
+    sequence::{delimited, terminated, tuple},
     IResult,
 };
 
@@ -14,7 +14,14 @@ pub type Line = (usize, Command);
 pub enum Command {
     Print(String),
     GoTo(usize),
+    Var((String, Primitive)), // Vlack Sheep
     None,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Primitive {
+    Int(i64),
+    String(String),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -125,7 +132,32 @@ fn read_string(i: &str) -> IResult<&str, String> {
 }
 
 fn match_command(i: &str) -> IResult<&str, &str> {
-    alt((tag("PRINT"), tag("GO TO")))(i)
+    alt((tag("PRINT"), tag("GO TO"), tag("LET")))(i)
+}
+
+fn parse_int(i: &str) -> IResult<&str, (String, Primitive)> {
+    let (i, _) = not(digit1)(i)?;
+    let (i, id) = alphanumeric1(i)?;
+    let (i, _) = tag("=")(i)?;
+    let (i, var) = map(cci64, Primitive::Int)(i)?;
+
+    Ok((i, (id.to_string(), var)))
+}
+
+fn parse_str(i: &str) -> IResult<&str, (String, Primitive)> {
+    let (i, id) = verify(anychar, |c| c.is_alphabetic())(i)?;
+    let (i, _) = tag("$")(i)?;
+    let (i, _) = tag("=")(i)?;
+    let (i, var) = map(read_string, Primitive::String)(i)?;
+    let var_name = format!("{}$", id);
+    Ok((i, (var_name, var)))
+}
+
+fn parse_var(i: &str) -> IResult<&str, (String, Primitive)> {
+    alt((
+        parse_int,
+        parse_str
+    ))(i)
 }
 
 fn parse_command(i: &str) -> IResult<&str, Command> {
@@ -135,6 +167,7 @@ fn parse_command(i: &str) -> IResult<&str, Command> {
     let (i, cmd) = match command {
         "PRINT" => map(read_string, Command::Print)(i)?,
         "GO TO" => map(ccu64, |line| Command::GoTo(line as usize))(i)?,
+        "LET" => map(parse_var, Command::Var)(i)?,
         _ => (i, Command::None),
     };
 
@@ -160,7 +193,7 @@ pub fn read_program(i: &str) -> IResult<&str, Program> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_line, read_program, read_string, Command, Node};
+    use super::{parse_line, read_program, read_string, Command, Node, Primitive, Line};
 
     #[test]
     fn it_parses_a_print_command() {
@@ -247,5 +280,50 @@ mod tests {
         let expected = ("", super::Program::new(expected_node));
         let result = read_program(lines).unwrap();
         assert_eq!(expected, result);
+    }
+    
+    #[test]
+    fn it_parses_an_integer() {
+        let line = "10 LET a=22";
+        let expected: Line = (10, Command::Var((String::from("a"), Primitive::Int(22))));
+        let (_, result) = parse_line(line).unwrap();
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn it_parses_a_many_char_integer() {
+        let line = "10 LET apple=1";
+        let expected: Line = (10, Command::Var((String::from("apple"), Primitive::Int(1))));
+        let (_, result) = parse_line(line).unwrap();
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn it_fails_if_integer_var_name_starts_with_number() {
+        let line = "10 LET 0apple=1";
+        let result = parse_line(line);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn it_parses_a_string_variable() {
+        let line = r#"10 LET a$="Hello world""#;
+        let expected: Line = (10, Command::Var((String::from("a$"), Primitive::String(String::from("Hello world")))));
+        let (_, result) = parse_line(line).unwrap();
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn it_fails_a_string_var_with_a_multichar_name() {
+        let line = r#"10 LET asd$="Hello world""#;
+        let result = parse_line(line);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn it_fails_a_string_var_with_a_numeric_name() {
+        let line = r#"10 LET 0$="Hello world""#;
+        let result = parse_line(line);
+        assert!(result.is_err());
     }
 }
