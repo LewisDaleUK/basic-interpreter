@@ -1,8 +1,15 @@
+use std::collections::HashMap;
+
 use nom::{
     branch::alt,
     bytes::complete::{escaped_transform, tag, take_until},
-    character::{complete::{u64 as ccu64, anychar}, streaming::none_of, complete::char as ccchar, complete::{i64 as cci64, alphanumeric1, digit1, alpha1}},
-    combinator::{map, value, not, verify},
+    character::{
+        complete::char as ccchar,
+        complete::{alpha1, alphanumeric1, digit1, i64 as cci64},
+        complete::{anychar, u64 as ccu64},
+        streaming::none_of,
+    },
+    combinator::{map, not, value, verify},
     multi::separated_list0,
     sequence::{delimited, terminated, tuple},
     IResult,
@@ -14,7 +21,7 @@ pub type Line = (usize, Command);
 pub enum Command {
     Print(String),
     GoTo(usize),
-    Var((String, Primitive)), // Vlack Sheep
+    Var((String, Primitive)),
     None,
 }
 
@@ -64,11 +71,13 @@ impl Node {
 pub struct Program {
     nodes: Node,
     current: Node,
+    vars: HashMap<String, Primitive>,
 }
 
 impl Program {
     pub fn new(node: Node) -> Self {
         Program {
+            vars: HashMap::new(),
             nodes: node.clone(),
             current: node,
         }
@@ -90,10 +99,14 @@ impl Program {
                 match item.1 {
                     Command::Print(line) => println!("{}", line),
                     Command::GoTo(line) => iter.jump_to_line(line),
+                    Command::Var((id, var)) => {
+                        self.vars.insert(id, var);
+                    }
                     _ => panic!("Unrecognised command"),
                 }
             };
         }
+        println!("{:?}", self.vars);
     }
 }
 
@@ -154,10 +167,7 @@ fn parse_str(i: &str) -> IResult<&str, (String, Primitive)> {
 }
 
 fn parse_var(i: &str) -> IResult<&str, (String, Primitive)> {
-    alt((
-        parse_int,
-        parse_str
-    ))(i)
+    alt((parse_int, parse_str))(i)
 }
 
 fn parse_command(i: &str) -> IResult<&str, Command> {
@@ -193,7 +203,7 @@ pub fn read_program(i: &str) -> IResult<&str, Program> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_line, read_program, read_string, Command, Node, Primitive, Line};
+    use super::{parse_line, read_program, read_string, Command, Line, Node, Primitive};
 
     #[test]
     fn it_parses_a_print_command() {
@@ -281,7 +291,7 @@ mod tests {
         let result = read_program(lines).unwrap();
         assert_eq!(expected, result);
     }
-    
+
     #[test]
     fn it_parses_an_integer() {
         let line = "10 LET a=22";
@@ -308,7 +318,13 @@ mod tests {
     #[test]
     fn it_parses_a_string_variable() {
         let line = r#"10 LET a$="Hello world""#;
-        let expected: Line = (10, Command::Var((String::from("a$"), Primitive::String(String::from("Hello world")))));
+        let expected: Line = (
+            10,
+            Command::Var((
+                String::from("a$"),
+                Primitive::String(String::from("Hello world")),
+            )),
+        );
         let (_, result) = parse_line(line).unwrap();
         assert_eq!(expected, result);
     }
