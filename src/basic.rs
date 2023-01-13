@@ -2,16 +2,15 @@ use std::collections::HashMap;
 
 use nom::{
     branch::alt,
-    bytes::complete::{escaped_transform, tag, take_until},
+    bytes::complete::{escaped_transform, tag},
     character::{
-        complete::char as ccchar,
-        complete::{alpha1, alphanumeric1, digit1, i64 as cci64},
+        complete::{alphanumeric1, digit1, i64 as cci64},
         complete::{anychar, u64 as ccu64},
         streaming::none_of,
     },
     combinator::{map, not, value, verify},
     multi::separated_list0,
-    sequence::{delimited, terminated, tuple},
+    sequence::{delimited, terminated},
     IResult,
 };
 
