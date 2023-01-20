@@ -1,15 +1,8 @@
 use std::collections::HashMap;
 
 use nom::{
-    branch::alt,
-    bytes::complete::{tag},
-    character::{
-        complete::{u64 as ccu64},
-    },
-    combinator::{map},
-    multi::separated_list0,
-    sequence::{terminated},
-    IResult,
+    branch::alt, bytes::complete::tag, character::complete::u64 as ccu64, combinator::map,
+    multi::separated_list0, sequence::terminated, IResult,
 };
 
 use crate::parsers::{generic, variables};

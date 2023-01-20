@@ -42,10 +42,7 @@ pub fn parse_assignment(i: &str) -> IResult<&str, (String, Primitive)> {
     let (i, assigned_variable) = consume_line(i)?;
     Ok((
         i,
-        (
-            id.to_string(),
-            Primitive::Assignment(assigned_variable.to_string()),
-        ),
+        (id, Primitive::Assignment(assigned_variable.to_string())),
     ))
 }
 
