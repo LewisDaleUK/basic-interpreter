@@ -2,17 +2,20 @@ use std::collections::HashMap;
 
 use nom::{
     branch::alt,
-    bytes::complete::{escaped_transform, tag, take_until, take_while, take_till},
+    bytes::complete::{escaped_transform, tag, take_till, take_until, take_while},
     character::{
         complete::{alphanumeric1, digit1, i64 as cci64},
-        complete::{anychar, u64 as ccu64, line_ending},
-        streaming::none_of, is_newline,
+        complete::{anychar, line_ending, u64 as ccu64},
+        is_newline,
+        streaming::none_of,
     },
-    combinator::{map, not, value, verify, rest},
+    combinator::{map, not, rest, value, verify},
     multi::separated_list0,
-    sequence::{delimited, terminated, preceded},
+    sequence::{delimited, preceded, terminated},
     IResult,
 };
+
+use crate::parsers::{generic, variables};
 
 pub type Line = (usize, Command);
 
@@ -29,13 +32,13 @@ pub enum Command {
 pub enum Primitive {
     Int(i64),
     String(String),
-    Assignment(String)
+    Assignment(String),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PrintOutput {
     Value(String),
-    Variable(String)
+    Variable(String),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -105,14 +108,17 @@ impl Program {
             if let Node::Link { item, next: _ } = node {
                 match item.1 {
                     Command::Print(PrintOutput::Value(line)) => println!("{}", line),
-                    Command::Print(PrintOutput::Variable(variable)) => println!("{:?}", self.vars.get(&variable).unwrap()),
+                    Command::Print(PrintOutput::Variable(variable)) => {
+                        println!("{:?}", self.vars.get(&variable).unwrap())
+                    }
                     Command::GoTo(line) => iter.jump_to_line(line),
                     Command::Var((id, Primitive::Assignment(variable))) => {
-                        self.vars.insert(id, self.vars.get(&variable).unwrap().clone());
-                    },
+                        self.vars
+                            .insert(id, self.vars.get(&variable).unwrap().clone());
+                    }
                     Command::Var((id, var)) => {
                         self.vars.insert(id, var);
-                    },
+                    }
                     Command::Comment => (),
                     _ => panic!("Unrecognised command"),
                 }
@@ -143,79 +149,20 @@ impl Iterator for Program {
     }
 }
 
-// Take everything until it hits a newline, if it does
-fn consume_line(i: &str) -> IResult<&str, &str> {
-    take_while(|c| c != '\n')(i)
-}
-
-fn read_string(i: &str) -> IResult<&str, String> {
-    delimited(
-        tag("\""),
-        escaped_transform(
-            none_of("\\\""),
-            '\\',
-            alt((value("\\", tag("\\")), value("\"", tag("\"")))),
-        ),
-        tag("\""),
-    )(i)
-}
-
 fn match_command(i: &str) -> IResult<&str, &str> {
     alt((tag("PRINT"), tag("GO TO"), tag("LET"), tag("REM")))(i)
 }
 
-fn parse_int_variable_name(i: &str) -> IResult<&str, String> {
-    map(
-        preceded(not(digit1), alphanumeric1),
-        String::from
-    )(i)
-}
-
-fn parse_int(i: &str) -> IResult<&str, (String, Primitive)> {
-    let (i, id) = parse_int_variable_name(i)?;
-    let (i, _) = tag("=")(i)?;
-    let (i, var) = map(cci64, Primitive::Int)(i)?;
-
-    Ok((i, (id, var)))
-}
-
-fn parse_str_variable_name(i: &str) -> IResult<&str, String> {
-    let (i, id) = terminated(
-        verify(anychar, |c| c.is_alphabetic()),
-        tag("$")
-    )(i)?;
-    let id = format!("{}$", id);
-    Ok((i, id))
-}
-
-fn parse_str(i: &str) -> IResult<&str, (String, Primitive)> {
-    let (i, id) = parse_str_variable_name(i)?;
-    let (i, _) = tag("=")(i)?;
-    let (i, var) = map(read_string, Primitive::String)(i)?;
-    Ok((i, (id, var)))
-}
-
-fn parse_assignment(i: &str) -> IResult<&str, (String, Primitive)> {
-    let (i, id) = alt((
-        parse_str_variable_name,
-        parse_int_variable_name
-    ))(i)?;
-    let (i, _) = tag("=")(i)?;
-    let (i, assigned_variable) = consume_line(i)?;
-    Ok((i, (id.to_string(), Primitive::Assignment(assigned_variable.to_string()))))
-}
-
-fn parse_var(i: &str) -> IResult<&str, (String, Primitive)> {
-    alt((parse_int, parse_str, parse_assignment))(i)
-}
-
 fn parse_print_command(i: &str) -> IResult<&str, PrintOutput> {
     alt((
-        map(alt((
-            parse_str_variable_name,
-            parse_int_variable_name
-        )), PrintOutput::Variable),
-        map(read_string, PrintOutput::Value)
+        map(
+            alt((
+                variables::parse_str_variable_name,
+                variables::parse_int_variable_name,
+            )),
+            PrintOutput::Variable,
+        ),
+        map(generic::read_string, PrintOutput::Value),
     ))(i)
 }
 
@@ -226,11 +173,11 @@ fn parse_command(i: &str) -> IResult<&str, Command> {
     let (i, cmd) = match command {
         "PRINT" => map(parse_print_command, Command::Print)(i)?,
         "GO TO" => map(ccu64, |line| Command::GoTo(line as usize))(i)?,
-        "LET" => map(parse_var, Command::Var)(i)?,
+        "LET" => map(variables::parse_var, Command::Var)(i)?,
         "REM" => {
-            let (i, _) = consume_line(i)?;
+            let (i, _) = generic::consume_line(i)?;
             (i, Command::Comment)
-        },
+        }
         _ => (i, Command::None),
     };
 
@@ -258,12 +205,17 @@ pub fn read_program(i: &str) -> IResult<&str, Program> {
 mod tests {
     use crate::basic::PrintOutput;
 
-    use super::{parse_line, read_program, read_string, Command, Line, Node, Primitive};
+    use super::{parse_line, read_program, Command, Line, Node, Primitive};
+
+    use crate::parsers::generic::read_string;
 
     #[test]
     fn it_parses_a_print_command() {
         let input = "10 PRINT \"Hello, world\"";
-        let expected = (10, Command::Print(PrintOutput::Value(String::from("Hello, world"))));
+        let expected = (
+            10,
+            Command::Print(PrintOutput::Value(String::from("Hello, world"))),
+        );
 
         let (_, result) = parse_line(input).unwrap();
         assert_eq!(expected, result);
@@ -279,7 +231,10 @@ mod tests {
     #[test]
     fn it_parses_a_print_command_with_escaped_quotes() {
         let input = r#"10 PRINT "Hello, \"world\"""#;
-        let expected = (10, Command::Print(PrintOutput::Value(String::from(r#"Hello, "world""#))));
+        let expected = (
+            10,
+            Command::Print(PrintOutput::Value(String::from(r#"Hello, "world""#))),
+        );
 
         let (_, result) = parse_line(input).unwrap();
         assert_eq!(expected, result);
@@ -296,13 +251,19 @@ mod tests {
     #[test]
     fn it_can_create_a_linked_list_for_a_program() {
         let mut node = Node::Link {
-            item: (10, Command::Print(PrintOutput::Value(String::from("Hello world")))),
+            item: (
+                10,
+                Command::Print(PrintOutput::Value(String::from("Hello world"))),
+            ),
             next: Box::new(Node::None),
         };
         node.push((20, Command::GoTo(10)));
 
         let expected = Node::Link {
-            item: (10, Command::Print(PrintOutput::Value(String::from("Hello world")))),
+            item: (
+                10,
+                Command::Print(PrintOutput::Value(String::from("Hello world"))),
+            ),
             next: Box::new(Node::Link {
                 item: (20, Command::GoTo(10)),
                 next: Box::new(Node::None),
@@ -314,15 +275,27 @@ mod tests {
     #[test]
     fn it_finds_a_node_by_line_number() {
         let mut node = Node::Link {
-            item: (10, Command::Print(PrintOutput::Value(String::from("Hello world")))),
+            item: (
+                10,
+                Command::Print(PrintOutput::Value(String::from("Hello world"))),
+            ),
             next: Box::new(Node::None),
         };
-        node.push((20, Command::Print(PrintOutput::Value(String::from("I'm a second line")))));
-        node.push((30, Command::Print(PrintOutput::Value(String::from("Still printing...")))));
+        node.push((
+            20,
+            Command::Print(PrintOutput::Value(String::from("I'm a second line"))),
+        ));
+        node.push((
+            30,
+            Command::Print(PrintOutput::Value(String::from("Still printing..."))),
+        ));
         node.push((40, Command::GoTo(10)));
 
         let expected: Option<Node> = Some(Node::Link {
-            item: (30, Command::Print(PrintOutput::Value(String::from("Still printing...")))),
+            item: (
+                30,
+                Command::Print(PrintOutput::Value(String::from("Still printing..."))),
+            ),
             next: Box::new(Node::Link {
                 item: (40, Command::GoTo(10)),
                 next: Box::new(Node::None),
@@ -336,7 +309,10 @@ mod tests {
     fn it_reads_a_program() {
         let lines = "10 PRINT \"Hello world\"\n20 GO TO 10";
         let expected_node = Node::Link {
-            item: (10, Command::Print(PrintOutput::Value(String::from("Hello world")))),
+            item: (
+                10,
+                Command::Print(PrintOutput::Value(String::from("Hello world"))),
+            ),
             next: Box::new(Node::Link {
                 item: (20, Command::GoTo(10)),
                 next: Box::new(Node::None),
@@ -404,10 +380,7 @@ mod tests {
         let (_, result) = parse_line(line).unwrap();
         let expected: Line = (
             10,
-            Command::Var((
-                String::from("a"),
-                Primitive::Assignment(String::from("b$"))
-            ))
+            Command::Var((String::from("a"), Primitive::Assignment(String::from("b$")))),
         );
         assert_eq!(result, expected);
     }
@@ -418,7 +391,7 @@ mod tests {
         let (_, result) = parse_line(line).unwrap();
         let expected: Line = (
             10,
-            Command::Print(PrintOutput::Variable(String::from("a$")))
+            Command::Print(PrintOutput::Variable(String::from("a$"))),
         );
         assert_eq!(result, expected);
     }
