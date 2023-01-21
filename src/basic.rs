@@ -1,11 +1,8 @@
 use std::collections::HashMap;
 
-use nom::{
-    branch::alt, bytes::complete::tag, character::complete::u64 as ccu64, combinator::map,
-    multi::separated_list0, sequence::terminated, IResult,
-};
+use nom::{bytes::complete::tag, multi::separated_list0, IResult};
 
-use crate::parsers::{generic, variables};
+use crate::parsers::commands;
 
 pub type Line = (usize, Command);
 
@@ -115,11 +112,22 @@ impl Program {
             };
         }
     }
+
+    fn read(i: &str) -> IResult<&str, Self> {
+        let (i, lines) = separated_list0(tag("\n"), commands::parse_line)(i)?;
+        let mut node = Node::None;
+
+        for line in lines.iter() {
+            node.push(line.clone());
+        }
+
+        Ok((i, Program::new(node)))
+    }
 }
 
 impl From<&str> for Program {
     fn from(value: &str) -> Self {
-        let (_, program) = read_program(value).unwrap();
+        let (_, program) = Self::read(value).unwrap();
         program
     }
 }
@@ -139,65 +147,13 @@ impl Iterator for Program {
     }
 }
 
-fn match_command(i: &str) -> IResult<&str, &str> {
-    alt((tag("PRINT"), tag("GO TO"), tag("LET"), tag("REM")))(i)
-}
-
-fn parse_print_command(i: &str) -> IResult<&str, PrintOutput> {
-    alt((
-        map(
-            alt((
-                variables::parse_str_variable_name,
-                variables::parse_int_variable_name,
-            )),
-            PrintOutput::Variable,
-        ),
-        map(generic::read_string, PrintOutput::Value),
-    ))(i)
-}
-
-fn parse_command(i: &str) -> IResult<&str, Command> {
-    let (i, command): (&str, &str) = match_command(i).unwrap_or((i, ""));
-    let (i, _) = tag(" ")(i)?;
-
-    let (i, cmd) = match command {
-        "PRINT" => map(parse_print_command, Command::Print)(i)?,
-        "GO TO" => map(ccu64, |line| Command::GoTo(line as usize))(i)?,
-        "LET" => map(variables::parse_var, Command::Var)(i)?,
-        "REM" => {
-            let (i, _) = generic::consume_line(i)?;
-            (i, Command::Comment)
-        }
-        _ => (i, Command::None),
-    };
-
-    Ok((i, cmd))
-}
-
-pub fn parse_line(line: &str) -> IResult<&str, Line> {
-    let (i, line_number) = map(terminated(ccu64, tag(" ")), |l| l as usize)(line)?;
-    let (i, command) = parse_command(i)?;
-    Ok((i, (line_number, command)))
-}
-
-pub fn read_program(i: &str) -> IResult<&str, Program> {
-    let (i, lines) = separated_list0(tag("\n"), parse_line)(i)?;
-    let mut node = Node::None;
-
-    for line in lines.iter() {
-        node.push(line.clone());
-    }
-
-    Ok((i, Program::new(node)))
-}
-
 #[cfg(test)]
 mod tests {
     use crate::basic::PrintOutput;
 
-    use super::{parse_line, read_program, Command, Line, Node, Primitive};
+    use super::{Command, Line, Node, Primitive, Program};
 
-    use crate::parsers::generic::read_string;
+    use crate::parsers::{commands::parse_line, generic::read_string};
 
     #[test]
     fn it_parses_a_print_command() {
@@ -308,8 +264,8 @@ mod tests {
                 next: Box::new(Node::None),
             }),
         };
-        let expected = ("", super::Program::new(expected_node));
-        let result = read_program(lines).unwrap();
+        let expected = Program::new(expected_node);
+        let result = Program::from(lines);
         assert_eq!(expected, result);
     }
 
