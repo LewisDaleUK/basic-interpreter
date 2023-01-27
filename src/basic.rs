@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use nom::{bytes::complete::tag, multi::separated_list0, IResult};
 
@@ -20,6 +20,16 @@ pub enum Primitive {
     Int(i64),
     String(String),
     Assignment(String),
+}
+
+impl Display for Primitive {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Primitive::Int(i) => write!(f, "{}", i),
+            Primitive::String(s) => write!(f, "{}", s),
+            Primitive::Assignment(a) => write!(f, "Assigment from {}", a),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -96,7 +106,7 @@ impl Program {
                 match item.1 {
                     Command::Print(PrintOutput::Value(line)) => println!("{}", line),
                     Command::Print(PrintOutput::Variable(variable)) => {
-                        println!("{:?}", self.vars.get(&variable).unwrap())
+                        println!("{}", self.vars.get(&variable).unwrap())
                     }
                     Command::GoTo(line) => iter.jump_to_line(line),
                     Command::Var((id, Primitive::Assignment(variable))) => {
