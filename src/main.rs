@@ -2,6 +2,7 @@ use std::fs;
 
 mod basic;
 mod commands;
+mod node;
 mod parsers;
 
 fn main() {

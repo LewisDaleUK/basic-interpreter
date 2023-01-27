@@ -2,43 +2,8 @@ use std::{collections::HashMap};
 
 use nom::{bytes::complete::tag, multi::separated_list0, IResult};
 
-use crate::{parsers, commands::{Line, Primitive, PrintOutput, Command}};
+use crate::{parsers, commands::{Primitive, PrintOutput, Command}, node::Node};
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Node {
-    None,
-    Link { item: Line, next: Box<Node> },
-}
-
-impl Node {
-    fn push(&mut self, val: Line) {
-        *self = match self {
-            Self::Link { item, next } => {
-                next.push(val);
-                Self::Link {
-                    item: item.clone(),
-                    next: next.clone(),
-                }
-            }
-            Self::None => Self::Link {
-                item: val,
-                next: Box::new(Self::None),
-            },
-        }
-    }
-
-    pub fn find_line(&self, line: usize) -> Option<Node> {
-        if let Self::Link { item, next } = self {
-            if item.0 == line {
-                Some(self.clone())
-            } else {
-                next.find_line(line)
-            }
-        } else {
-            None
-        }
-    }
-}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Program {
@@ -127,9 +92,12 @@ impl Iterator for Program {
 mod tests {
     use crate::basic::PrintOutput;
 
-    use super::{Command, Line, Node, Primitive, Program};
+    use super::{Command, Node, Primitive, Program};
 
-    use crate::parsers::{commands::parse_line, generic::read_string};
+    use crate::{
+        parsers::{commands::parse_line, generic::read_string},
+        commands::Line
+    };
 
     #[test]
     fn it_parses_a_print_command() {
