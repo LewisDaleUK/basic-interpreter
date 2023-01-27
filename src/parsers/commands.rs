@@ -3,7 +3,7 @@ use nom::{
     sequence::terminated, IResult,
 };
 
-use crate::basic::{Command, Line, PrintOutput};
+use crate::commands::{Command, Line, PrintOutput};
 
 use super::{generic, variables};
 

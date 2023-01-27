@@ -7,7 +7,7 @@ use nom::{
     IResult,
 };
 
-use crate::basic::Primitive;
+use crate::commands::Primitive;
 
 use super::generic::{consume_line, read_string};
 

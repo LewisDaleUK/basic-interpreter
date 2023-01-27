@@ -1,6 +1,7 @@
 use std::fs;
 
 mod basic;
+mod commands;
 mod parsers;
 
 fn main() {
