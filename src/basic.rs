@@ -1,9 +1,12 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 use nom::{bytes::complete::tag, multi::separated_list0, IResult};
 
-use crate::{parsers, commands::{Primitive, PrintOutput, Command}, node::Node};
-
+use crate::{
+    commands::{Command, Primitive, PrintOutput},
+    node::Node,
+    parsers,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Program {
@@ -95,8 +98,8 @@ mod tests {
     use super::{Command, Node, Primitive, Program};
 
     use crate::{
+        commands::Line,
         parsers::{commands::parse_line, generic::read_string},
-        commands::Line
     };
 
     #[test]
